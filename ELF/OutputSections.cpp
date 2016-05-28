@@ -548,7 +548,8 @@ void GnuHashTableSection<ELFT>::addSymbols(
                                    });
   if (Mid == V.end())
     return;
-  for (auto I = Mid, E = V.end(); I != E; ++I) {
+  auto E = V.end();
+  for (auto I = Mid; I != E; ++I) {
     SymbolBody *B = I->first;
     size_t StrOff = I->second;
     Symbols.push_back({B, StrOff, hashGnu(B->getName())});
