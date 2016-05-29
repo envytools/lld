@@ -1021,8 +1021,10 @@ template <class ELFT> void Writer<ELFT>::createPhdrs() {
   };
 
   // The first phdr entry is PT_PHDR which describes the program header itself.
-  Phdr &Hdr = *AddHdr(PT_PHDR, PF_R);
-  AddSec(Hdr, Out<ELFT>::ProgramHeaders);
+  if (Config->EMachine != EM_FALCON) {
+    Phdr &Hdr = *AddHdr(PT_PHDR, PF_R);
+    AddSec(Hdr, Out<ELFT>::ProgramHeaders);
+  }
 
   // PT_INTERP must be the second entry if exists.
   if (needsInterpSection()) {
@@ -1032,9 +1034,12 @@ template <class ELFT> void Writer<ELFT>::createPhdrs() {
 
   // Add the first PT_LOAD segment for regular output sections.
   uintX_t Flags = PF_R;
-  Phdr *Load = AddHdr(PT_LOAD, Flags);
-  AddSec(*Load, Out<ELFT>::ElfHeader);
-  AddSec(*Load, Out<ELFT>::ProgramHeaders);
+  Phdr *Load = nullptr;
+  if (Config->EMachine != EM_FALCON) {
+    Load = AddHdr(PT_LOAD, Flags);
+    AddSec(*Load, Out<ELFT>::ElfHeader);
+    AddSec(*Load, Out<ELFT>::ProgramHeaders);
+  }
 
   Phdr TlsHdr(PT_TLS, PF_R);
   Phdr RelRo(PT_GNU_RELRO, PF_R);
@@ -1054,7 +1059,7 @@ template <class ELFT> void Writer<ELFT>::createPhdrs() {
 
     // If flags changed then we want new load segment.
     uintX_t NewFlags = toPhdrFlags(Sec->getFlags());
-    if (Flags != NewFlags) {
+    if (Flags != NewFlags || !Load) {
       Load = AddHdr(PT_LOAD, NewFlags);
       Flags = NewFlags;
     }
@@ -1091,7 +1096,7 @@ template <class ELFT> void Writer<ELFT>::createPhdrs() {
 
   // PT_GNU_STACK is a special section to tell the loader to make the
   // pages for the stack non-executable.
-  if (!Config->ZExecStack)
+  if (!Config->ZExecStack && Config->EMachine != EM_FALCON)
     AddHdr(PT_GNU_STACK, PF_R | PF_W);
 
   if (Note.First)

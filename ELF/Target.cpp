@@ -161,6 +161,13 @@ public:
   RelExpr getRelExpr(uint32_t Type, const SymbolBody &S) const override;
 };
 
+class FalconTargetInfo final : public TargetInfo {
+public:
+  FalconTargetInfo();
+  void relocateOne(uint8_t *Loc, uint32_t Type, uint64_t Val) const override;
+  RelExpr getRelExpr(uint32_t Type, const SymbolBody &S) const override;
+};
+
 template <class ELFT> class MipsTargetInfo final : public TargetInfo {
 public:
   MipsTargetInfo();
@@ -187,6 +194,8 @@ TargetInfo *createTarget() {
     return new AArch64TargetInfo();
   case EM_AMDGPU:
     return new AMDGPUTargetInfo();
+  case EM_FALCON:
+    return new FalconTargetInfo();
   case EM_MIPS:
     switch (Config->EKind) {
     case ELF32LEKind:
@@ -1581,6 +1590,79 @@ void MipsTargetInfo<ELFT>::relocateOne(uint8_t *Loc, uint32_t Type,
 template <class ELFT>
 bool MipsTargetInfo<ELFT>::usesOnlyLowPageBits(uint32_t Type) const {
   return Type == R_MIPS_LO16 || Type == R_MIPS_GOT_OFST;
+}
+
+FalconTargetInfo::FalconTargetInfo() {
+  PageSize = 0x100;
+  VAStart = 0;
+}
+
+void FalconTargetInfo::relocateOne(uint8_t *Loc, uint32_t Type,
+                                uint64_t Val) const {
+  switch (Type) {
+  case R_FALCON_HI8:
+    Val >>= 16;
+  case R_FALCON_8:
+    if (Val >= 0x100)
+      fatal("R_FALCON_8 reloc out of range");
+    *Loc = Val;
+    break;
+  case R_FALCON_16:
+    if (Val >= 0x10000)
+      fatal("R_FALCON_16 reloc out of range");
+    write16le(Loc, Val);
+    break;
+  case R_FALCON_24:
+    if (Val >= 0x1000000)
+      fatal("R_FALCON_24 reloc out of range");
+    write16le(Loc, Val);
+    Loc[2] = Val >> 16;
+    break;
+  case R_FALCON_32:
+  case R_FALCON_PC32:
+    write32le(Loc, Val);
+    break;
+  case R_FALCON_S8:
+  case R_FALCON_PC8:
+    if (Val >= 0x80 && Val < uint64_t(-0x80))
+      fatal("R_FALCON_S8 reloc out of range");
+    *Loc = Val;
+    break;
+  case R_FALCON_S16:
+  case R_FALCON_PC16:
+    if (Val >= 0x8000 && Val < uint64_t(-0x80))
+      fatal("R_FALCON_S16 reloc out of range");
+    write16le(Loc, Val);
+    break;
+  case R_FALCON_HI16:
+    Val >>= 16;
+  case R_FALCON_LO16:
+    write16le(Loc, Val);
+    break;
+  case R_FALCON_8S1:
+    if (Val >= 0x200 || Val & 1)
+      fatal("R_FALCON_8S1 reloc out of range");
+    *Loc = Val >> 1;
+    break;
+  case R_FALCON_8S2:
+    if (Val >= 0x400 || Val & 3)
+      fatal("R_FALCON_8S2 reloc out of range");
+    *Loc = Val >> 2;
+    break;
+  default:
+    fatal("unrecognized reloc " + Twine(Type));
+  }
+}
+
+RelExpr FalconTargetInfo::getRelExpr(uint32_t Type, const SymbolBody &S) const {
+  switch (Type) {
+  default:
+    return R_ABS;
+  case R_FALCON_PC8:
+  case R_FALCON_PC16:
+  case R_FALCON_PC32:
+    return R_PC;
+  }
 }
 }
 }
